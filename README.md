@@ -31,7 +31,8 @@ search `choice金融终端官网` and download.
 
 #### 2.3 右边上方`提取数据`
 
-获得 excel 表
+
+点右上角 `导出EXCEL`,获得 excel 表
 ![data_explorer4](./assets/images/data_explorer4.png)
 
 ### 3 统计
