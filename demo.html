@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重仓证券统计</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1, h2 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        #dropZone {
+            border: 3px dashed #3498db;
+            border-radius: 20px;
+            width: 100%;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4em;
+            color: #3498db;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            background-color: #fff;
+            cursor: pointer;
+        }
+        #dropZone.dragover {
+            background-color: #ecf0f1;
+            border-color: #2980b9;
+            color: #2980b9;
+        }
+        #result {
+            margin-top: 30px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        #chartContainer {
+            margin-top: 30px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>重仓证券统计</h1>
+    <div id="dropZone">将Excel文件拖放到这里</div>
+    <div id="result"></div>
+    <div id="chartContainer">
+        <canvas id="chart"></canvas>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            handleFile(file);
+        });
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                
+                const securitiesCount = {};
+                jsonData.forEach(row => {
+                    for (let key in row) {
+                        if (key.includes('重仓股票') || key.includes('重仓证券')) {
+                            const securities = row[key];
+                            if (securities) {
+                                const securitiesList = securities.split(',');
+                                securitiesList.forEach(security => {
+                                    const trimmedSecurity = security.trim();
+                                    if (trimmedSecurity) {
+                                        securitiesCount[trimmedSecurity] = (securitiesCount[trimmedSecurity] || 0) + 1;
+                                    }
+                                });
+                            }
+                            break;
+                        }
+                    }
+                });
+
+                const sortedSecurities = Object.entries(securitiesCount)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 20);
+
+                displayResults(sortedSecurities);
+                createChart(sortedSecurities);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function displayResults(data) {
+            const resultDiv = document.getElementById('result');
+            let html = '<h2>前20个重仓证券</h2>';
+            html += '<table><tr><th>排名</th><th>证券名称</th><th>出现次数</th></tr>';
+            data.forEach(([security, count], index) => {
+                html += `<tr><td>${index + 1}</td><td>${security}</td><td>${count}</td></tr>`;
+            });
+            html += '</table>';
+            resultDiv.innerHTML = html;
+        }
+
+        function createChart(data) {
+            const ctx = document.getElementById('chart').getContext('2d');
+            if (window.myChart) {
+                window.myChart.destroy();
+            }
+
+            // 创建一个从深蓝到浅蓝的渐变色数组
+            const generateGradientColors = (count) => {
+                const colors = [];
+                for (let i = 0; i < count; i++) {
+                    const ratio = i / (count - 1);
+                    const r = Math.round(41 + ratio * (173 - 41));
+                    const g = Math.round(128 + ratio * (216 - 128));
+                    const b = Math.round(185 + ratio * (230 - 185));
+                    colors.push(`rgb(${r}, ${g}, ${b})`);
+                }
+                return colors;
+            };
+
+            const colors = generateGradientColors(data.length);
+
+            window.myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(item => item[0]),
+                    datasets: [{
+                        label: '出现次数',
+                        data: data.map(item => item[1]),
+                        backgroundColor: colors,
+                        borderColor: colors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: '重仓证券出现次数统计',
+                            font: {
+                                size: 18
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '出现次数'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: '证券名称'
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
